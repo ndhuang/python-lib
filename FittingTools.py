@@ -16,9 +16,6 @@ class Parameter:
     ----------
     value : number
            The parameter value
-    interval : array-like, optional
-              The confidence interval.  This, in general, should not be
-              set by the user.
 
     Attributes
     ----------
@@ -30,9 +27,9 @@ class Parameter:
 
     """
     
-    def __init__(self, value, interval = None):
+    def __init__(self, value):
         self.value = value
-        self.interval = interval
+        self.setVariance(0)
         
     def set(self, value):
         '''
@@ -53,6 +50,20 @@ class Parameter:
         
         self.interval = np.sort(interval)
 
+    def setVariance(self, var):
+        '''
+        set the variance
+        
+        Parameters
+        ----------
+        var : float
+            The variance of the parameter (sigma **2)
+        '''
+        
+        self.var = var
+        self.sigma = np.sqrt(var)
+        self.setConfInt([self.value - self.sigma, self.value + self.sigma])
+
     def getConfInt(self):
         '''
         Return the confidence interval (lower, upper).
@@ -64,16 +75,16 @@ class Parameter:
         return self.value
 
     def __str__(self):
-        if (self.interval != None):
-            return '%3.6E \t(%3.6E, %3.6E)' %(self.value, self.interval[0],
-                                            self.interval[1])
+        if (self.sigma >= 0):
+            return '%3.6E \t(%3.6E)' %(self.value, self.sigma)
         return self.value.__str__()
 
     def __repr__(self):
         return self.__str__()
         
 
-def fit(function, params, y, args, rawOutput = False, weights = None,
+def fit(function, params, y, args, 
+        rawOutput = False, errors = None, weights = None,
         algorithm = None, **fitOpts):
     
     """
@@ -96,6 +107,10 @@ def fit(function, params, y, args, rawOutput = False, weights = None,
     rawOutput : bool, optional
                If true, fit returns the output of the minimization
                function. Defaults to False
+    errors: array-like optional
+        A vector containing the standard deviation of each point.  This is
+        used to calculate the weights.  If both `errors` and `weights` are set,
+        then `errors` will be used to overwrite `weights`.  Defaults to None.
     weights : array-like, optional
              A vector containing the weight at each point.  If `weights`
              is None, each point is given equal weighting.  Defaults to
@@ -103,7 +118,7 @@ def fit(function, params, y, args, rawOutput = False, weights = None,
     algorithm : string, optional
                Specifies the minimization algorithm to be used.
                Valid values are:
-               * 'lm': Levenberg-Marquardt
+               * 'lm': Levenberg-Marquardt (default)
                * 'simplex': Downhill simplex 
                * 'cg' or 'conjugate': Conjugate gradient
                * 'Powell': Powell's method
@@ -153,7 +168,10 @@ def fit(function, params, y, args, rawOutput = False, weights = None,
 
     ##########################################################################
     # Begin error function 
-    if (weights == None):
+    if errors is not None:
+        weights = 1. / (errors * errors)
+        weights /= np.mean(weights)
+    elif weights is None:
         weights = np.ones(np.shape(y))
 
     argList = inspect.getargspec(function)[0]
@@ -170,6 +188,10 @@ def fit(function, params, y, args, rawOutput = False, weights = None,
                 p.set(parameters[i])
                 i += 1
             return (y - function(*args)) * weights
+        if errors is not None:
+            chi2 = lambda p: sum(((function(*args) - y) / errors) ** 2)
+        else:
+            chi2 = lambda p: sum(((function(*args) - y)) ** 2)
     else:
         # function of one variable
         def f(parameters):
@@ -178,7 +200,10 @@ def fit(function, params, y, args, rawOutput = False, weights = None,
                 p.set(parameters[i])
                 i += 1
             return (y - function(args)) * weights
-    chi2 = lambda p: sum(f(p) ** 2)
+        if errors is not None:
+            chi2 = lambda p: sum(((function(args) - y) / errors) ** 2)
+        else:
+            chi2 = lambda p: sum(((function(args) - y)) ** 2)
     # End error function 
     ##########################################################################
 
@@ -190,6 +215,7 @@ def fit(function, params, y, args, rawOutput = False, weights = None,
         # Use Levenberg-Marquardt
         p, cov, infodict, mesg, flag = \
            optimize.leastsq(f, p, full_output = True, **fitOpts)
+
         if (rawOutput):
             return p, cov, infodict, mesg, ier
         # print warnings
@@ -281,9 +307,16 @@ def fit(function, params, y, args, rawOutput = False, weights = None,
 
     chi2Reduced = fMin / (len(residuals) - len(params))
     rmsErr = np.sqrt(np.sum(residuals * residuals))
-
-    gof = {'residuals': residuals, 'Reduced Chi2': chi2Reduced,
-           'RMS error': rmsErr}
+    
+    try:
+        gof = {'residuals': residuals, 'Reduced Chi2': chi2Reduced,
+               'RMS error': rmsErr, 'cov': cov}
+        for i, p in enumerate(params):
+            p.setVariance(abs(cov[i][i]))
+    except NameError:
+        gof = {'residuals': residuals, 'Reduced Chi2': chi2Reduced,
+               'RMS error': rmsErr}
+        
     return params, gof
 
 def ConfInt(function, y, args, param, fMin = None, weights = None, dChi2 = 4):
