@@ -51,7 +51,7 @@ def main(srcPath, destPath, min = None, max = None):
             if (picNum > maxPic):
                 maxPic = picNum
         except ValueError:
-            print 'Invalid file name: ' + picture
+            print 'Unusual file name: ' + picture
             continue
 
     # find all the used numbers in the destination dir
@@ -61,7 +61,7 @@ def main(srcPath, destPath, min = None, max = None):
             picNum = int(picture[4:8])
             used[picNum] = True
         except ValueError:
-            print 'Invalid file name: ' + picture
+            print 'Unusual file name: ' + picture
             continue
 
     i = 0
@@ -80,9 +80,19 @@ def main(srcPath, destPath, min = None, max = None):
             
         while (i < len(used) and used[i]):
             i = i + 1
-        extension = picture[len(picture) - 3:len(picture)]
-        num = "{0:04d}".format(i + 1)
-        newName = "DSC_%s.%s" %(num, extension)
+        match = re.match('DSC_\d\d\d\d\.', picture)
+        if match is None:
+            parts = picture.rsplit('.', 1)
+            extension = parts[-1]
+            name = parts[0]
+            i = 1
+            while os.path.exists(destPath + '.'.join([name, extension])):
+                name = name + '-' + str(i)
+            newName = '.'.join([name, extension])
+        else:
+            extension = picture.rsplit('.', 1)[-1]
+            num = "{0:04d}".format(i + 1)
+            newName = "DSC_%s.%s" %(num, extension)
         shutil.move(srcPath + picture, destPath + newName)
         # try to move RawTherapee profile with the image
         try:
