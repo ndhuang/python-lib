@@ -41,7 +41,10 @@ def main():
     if (not os.path.exists(camPath)):
         camPath = "/media/NIKON D7000/DCIM/100D7000/"
         if (not os.path.exists(camPath)):
+            camPath = "/media/ndhuang/NIKON D7000/DCIM/100D7000/"
+        if (not os.path.exists(camPath)):
             raise OSError('Insert camera SD card, or edit path')
+        
     if (not os.path.exists(unloadPath)):
         raise OSError('Target directory does not exist; check path')
     newPics = sorted(checkFiles(os.listdir(camPath)))
