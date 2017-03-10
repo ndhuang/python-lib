@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 from pyexiv2 import ImageMetadata
 import numpy as np
 import mimetypes
